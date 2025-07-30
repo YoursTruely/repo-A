@@ -103,7 +103,7 @@ jobs:
           echo "Generated tag: $RELEASE_TAG"
 
           echo "Updating parent version and common-domain version in pom.xml to $RELEASE_TAG"
-          sed -i "0,/<parent>/,/</parent>/s|<version>.*</version>|<version>$RELEASE_TAG</version>|" pom.xml
+          sed -i "0,/<parent>/,/<\/parent>/s/<version>.*<\/version>/<version>$RELEASE_TAG<\/version>/" pom.xml
           sed -i "s|<common-domain-version>.*</common-domain-version>|<common-domain-version>$RELEASE_TAG</common-domain-version>|" pom.xml
 
           if git diff --quiet; then
