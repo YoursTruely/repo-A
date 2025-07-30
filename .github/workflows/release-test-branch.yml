@@ -18,8 +18,8 @@ jobs:
       - name: Checkout controller repo
         uses: actions/checkout@v4
 
-      - name: Install xmllint
-        run: sudo apt-get update && sudo apt-get install -y libxml2-utils
+      - name: Install XML tools
+        run: sudo apt-get update && sudo apt-get install -y libxml2-utils xsltproc
 
       - name: Clone and process repo-C
         run: |
@@ -62,6 +62,9 @@ jobs:
       - name: Checkout controller repo
         uses: actions/checkout@v4
 
+      - name: Install XML tools
+        run: sudo apt-get update && sudo apt-get install -y libxml2-utils xsltproc
+
       - name: Clone and process repo-B
         run: |
           gh repo clone YoursTruely/repo-B && cd repo-B
@@ -89,9 +92,8 @@ jobs:
             exit 1
           fi
 
-          ESCAPED_TAG=$(printf '%s' "$RELEASE_TAG" | sed 's/[&\/@]/\\&/g')
-          sed -i "0,/<parent>/,/parent>/ { /<version>.*<\\/version>/ s#<version>.*</version>#<version>$ESCAPED_TAG</version># }" pom.xml
-          sed -i "s|<common-domain-version>.*</common-domain-version>|<common-domain-version>$ESCAPED_TAG</common-domain-version>|" pom.xml
+          # Update POM versions using the script
+          bash "$GITHUB_WORKSPACE/.github/scripts/update_pom_versions.sh" "$RELEASE_TAG"
 
           if ! git diff --quiet; then
             git add pom.xml
@@ -110,6 +112,9 @@ jobs:
     steps:
       - name: Checkout controller repo
         uses: actions/checkout@v4
+
+      - name: Install XML tools
+        run: sudo apt-get update && sudo apt-get install -y libxml2-utils xsltproc
 
       - name: Clone and process repo-A
         run: |
@@ -138,9 +143,8 @@ jobs:
             exit 1
           fi
 
-          ESCAPED_TAG=$(printf '%s' "$RELEASE_TAG" | sed 's/[&\/@]/\\&/g')
-          sed -i "0,/<parent>/,/parent>/ { /<version>.*<\\/version>/ s#<version>.*</version>#<version>$ESCAPED_TAG</version># }" pom.xml
-          sed -i "s|<common-domain-version>.*</common-domain-version>|<common-domain-version>$ESCAPED_TAG</common-domain-version>|" pom.xml
+          # Update POM versions using the script
+          bash "$GITHUB_WORKSPACE/.github/scripts/update_pom_versions.sh" "$RELEASE_TAG"
 
           if ! git diff --quiet; then
             git add pom.xml
