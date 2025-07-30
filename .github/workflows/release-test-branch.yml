@@ -12,7 +12,7 @@ env:
 jobs:
   release-c:
     runs-on: ubuntu-latest
-    steps:
+        steps:
       - name: Clone and process repo-C
         env:
           GH_TOKEN: ${{ secrets.REPO_C_TOKEN }}
@@ -55,12 +55,12 @@ jobs:
   release-b:
     needs: release-c
     runs-on: ubuntu-latest
-    steps:
+        steps:
       - name: Clone and process repo-B
         env:
           GH_TOKEN: ${{ secrets.REPO_B_TOKEN }}
         run: |
-          gh auth setup-git
+          echo "$GH_TOKEN" | gh auth login --with-token
           gh repo clone YourOrg/repo-B && cd repo-B
           cd repo-B
           git fetch origin develop
