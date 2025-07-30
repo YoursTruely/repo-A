@@ -7,7 +7,6 @@ on:
 
 env:
   KEYWORD: "SCON"
-  DATE_TAG: "$(date +'%Y-%m-%d')"
 
 jobs:
   release-c:
@@ -16,11 +15,12 @@ jobs:
       GH_TOKEN: ${{ secrets.REPO_C_TOKEN }}
     steps:
       - name: Clone and process repo-C
-                run: |
+        run: |
           echo "$GH_TOKEN" | gh auth login --with-token
+          DATE_TAG=$(date +'%Y-%m-%d')
           gh repo clone YourOrg/repo-C && cd repo-C
           git fetch origin develop
-          BRANCH_NAME="test-${{ env.DATE_TAG }}"
+          BRANCH_NAME="test-$DATE_TAG"
           if git ls-remote --exit-code --heads origin "$BRANCH_NAME"; then
             echo "Branch $BRANCH_NAME already exists. Checking it out."
             git checkout "$BRANCH_NAME"
@@ -28,7 +28,7 @@ jobs:
             git checkout origin/develop -b "$BRANCH_NAME"
           fi
 
-          for BRANCH in $(gh pr list --base develop --state open --json headRefName --jq ".[] | select(.headRefName | test(\"$KEYWORD\")) | .headRefName"); do
+          for BRANCH in $(gh pr list --base develop --state open --json headRefName,mergeable --jq ".[] | select(.headRefName | test(\"$KEYWORD\")) | select(.mergeable == \"MERGEABLE\") | .headRefName"); do
             echo "Merging $BRANCH into $BRANCH_NAME..."
             git fetch origin $BRANCH
             git merge origin/$BRANCH --no-edit || { echo "Conflict in $BRANCH — stopping"; exit 1; }
@@ -36,9 +36,7 @@ jobs:
 
           git push origin "$BRANCH_NAME"
 
-          git push origin "$BRANCH_NAME"
-
-          .github/scripts/generate_tag.sh "$KEYWORD" "${{ env.DATE_TAG }}"
+          .github/scripts/generate_tag.sh "$KEYWORD" "$DATE_TAG"
           TAG_NAME=$(cat .tag_name)
 
           git tag "$TAG_NAME"
@@ -51,21 +49,21 @@ jobs:
       GH_TOKEN: ${{ secrets.REPO_B_TOKEN }}
     steps:
       - name: Clone and process repo-B
-                run: |
+        run: |
           echo "$GH_TOKEN" | gh auth login --with-token
+          DATE_TAG=$(date +'%Y-%m-%d')
           gh repo clone YourOrg/repo-B && cd repo-B
           git fetch origin develop
-          BRANCH_NAME="test-${{ env.DATE_TAG }}"
+          BRANCH_NAME="test-$DATE_TAG"
           git checkout origin/develop -b "$BRANCH_NAME"
 
-          for BRANCH in $(gh pr list --base develop --state open --json headRefName --jq ".[] | select(.headRefName | test(\"$KEYWORD\")) | .headRefName"); do
+          for BRANCH in $(gh pr list --base develop --state open --json headRefName,mergeable --jq ".[] | select(.headRefName | test(\"$KEYWORD\")) | select(.mergeable == \"MERGEABLE\") | .headRefName"); do
             echo "Merging $BRANCH into $BRANCH_NAME..."
             git fetch origin $BRANCH
             git merge origin/$BRANCH --no-edit || { echo "Conflict in $BRANCH — stopping"; exit 1; }
           done
 
-          # Update common-domain version in B's pom.xml
-          .github/scripts/generate_tag.sh "$KEYWORD" "${{ env.DATE_TAG }}"
+          .github/scripts/generate_tag.sh "$KEYWORD" "$DATE_TAG"
           RELEASE_TAG=$(cat .tag_name)
 
           echo "Updating parent version and common-domain version in pom.xml to $RELEASE_TAG"
