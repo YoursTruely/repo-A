@@ -1,0 +1,7 @@
+<parent>
+    <version>5.30.0-RC.2</version>
+</parent>
+
+<properties>
+    <common-domain-version>5.30.0-RC.2</common-domain-version>
+</properties>
