@@ -103,4 +103,76 @@ jobs:
           echo "Generated tag: $RELEASE_TAG"
 
           echo "Updating parent version and common-domain version in pom.xml to $RELEASE_TAG"
-          ESCAPED_TAG=$(printf '%s' "$RELEASE_TAG" | sed 's/[&\/]/\&/g')
+          ESCAPED_TAG=$(printf '%s' "$RELEASE_TAG" | sed 's/[&\/]/\\&/g')
+          sed -i "0,/<parent>/,/<\/parent>/s#<version>.*</version>#<version>$ESCAPED_TAG</version>#" pom.xml
+          sed -i "s|<common-domain-version>.*</common-domain-version>|<common-domain-version>$ESCAPED_TAG</common-domain-version>|" pom.xml
+
+          if git diff --quiet; then
+            echo "No changes to commit"
+          else
+            git add pom.xml
+            git commit -m "Update parent version and common-domain version to $RELEASE_TAG"
+          fi
+
+          git push origin "$BRANCH_NAME"
+          git tag "$RELEASE_TAG"
+          git push origin "$RELEASE_TAG"
+
+  release-a:
+    needs: release-b
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout controller repo
+        uses: actions/checkout@v4
+
+      - name: Clone and process repo-A
+        run: |
+          DATE_TAG=$(date +'%Y-%m-%d')
+          gh repo clone YoursTruely/repo-A && cd repo-A
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global credential.helper store
+          git remote set-url origin https://x-access-token:$GH_TOKEN@github.com/YoursTruely/repo-A
+          git fetch origin develop
+          BRANCH_NAME="test-$DATE_TAG"
+
+          if git ls-remote --exit-code --heads origin "$BRANCH_NAME"; then
+            echo "Branch $BRANCH_NAME already exists. Checking it out."
+            git checkout "$BRANCH_NAME"
+          else
+            git checkout origin/develop -b "$BRANCH_NAME"
+          fi
+
+          for BRANCH in $(gh pr list --base develop --state open --json headRefName,mergeable --jq ".[] | select(.headRefName | test(\"$KEYWORD\")) | select(.mergeable == \"MERGEABLE\") | .headRefName"); do
+            echo "Merging $BRANCH into $BRANCH_NAME..."
+            git fetch origin $BRANCH
+            git merge origin/$BRANCH --no-edit || { echo "Conflict in $BRANCH — stopping"; exit 1; }
+          done
+
+          bash "$GITHUB_WORKSPACE/.github/scripts/generate_tag.sh" "$KEYWORD" "$DATE_TAG"
+          RELEASE_TAG=$(cat .tag_name)
+
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "ERROR: Empty tag name generated. Exiting."
+            exit 1
+          fi
+
+          echo "Generated tag: $RELEASE_TAG"
+
+          echo "Updating parent and common-domain version in pom.xml to $RELEASE_TAG"
+          ESCAPED_TAG=$(printf '%s' "$RELEASE_TAG" | sed 's/[&\/]/\\&/g')
+          sed -i "0,/<parent>/,/<\/parent>/s#<version>.*</version>#<version>$ESCAPED_TAG</version>#" pom.xml
+          sed -i "s|<common-domain-version>.*</common-domain-version>|<common-domain-version>$ESCAPED_TAG</common-domain-version>|" pom.xml
+
+          if git diff --quiet; then
+            echo "No changes to commit"
+          else
+            git add pom.xml
+            git commit -m "Update parent and common-domain version to $RELEASE_TAG"
+          fi
+
+          git push origin "$BRANCH_NAME"
+          git tag "$RELEASE_TAG"
+          git push origin "$RELEASE_TAG"
