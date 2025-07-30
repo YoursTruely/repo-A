@@ -17,7 +17,7 @@ jobs:
       - name: Clone and process repo-C
         run: |
           DATE_TAG=$(date +'%Y-%m-%d')
-          gh repo clone YourOrg/repo-C && cd repo-C
+          gh repo clone YoursTruely/repo-C && cd repo-C
           git fetch origin develop
           BRANCH_NAME="test-$DATE_TAG"
 
@@ -51,7 +51,7 @@ jobs:
       - name: Clone and process repo-B
         run: |
           DATE_TAG=$(date +'%Y-%m-%d')
-          gh repo clone YourOrg/repo-B && cd repo-B
+          gh repo clone YoursTruely/repo-B && cd repo-B
           git fetch origin develop
           BRANCH_NAME="test-$DATE_TAG"
 
