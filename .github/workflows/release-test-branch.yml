@@ -7,6 +7,7 @@ on:
 
 env:
   KEYWORD: "SCON"
+  DATE_TAG: ${{ github.run_id }}
 
 jobs:
   release-c:
@@ -22,39 +23,32 @@ jobs:
 
       - name: Clone and process repo-C
         run: |
-          DATE_TAG=$(date +'%Y-%m-%d')
           gh repo clone YoursTruely/repo-C && cd repo-C
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
-          git config --global credential.helper store
           git remote set-url origin https://x-access-token:$GH_TOKEN@github.com/YoursTruely/repo-C
           git fetch origin develop
-          BRANCH_NAME="test-$DATE_TAG"
+          BRANCH_NAME="test-${{ env.DATE_TAG }}"
 
           if git ls-remote --exit-code --heads origin "$BRANCH_NAME"; then
-            echo "Branch $BRANCH_NAME already exists. Checking it out."
             git checkout "$BRANCH_NAME"
           else
-            git checkout origin/develop -b "$BRANCH_NAME"
+            git checkout -b "$BRANCH_NAME" origin/develop
           fi
 
           for BRANCH in $(gh pr list --base develop --state open --json headRefName,mergeable --jq ".[] | select(.headRefName | test(\"$KEYWORD\")) | select(.mergeable == \"MERGEABLE\") | .headRefName"); do
-            echo "Merging $BRANCH into $BRANCH_NAME..."
             git fetch origin $BRANCH
-            git merge origin/$BRANCH --no-edit || { echo "Conflict in $BRANCH — stopping"; exit 1; }
+            git merge origin/$BRANCH --no-edit || exit 1
           done
 
           git push origin "$BRANCH_NAME"
 
-          bash "$GITHUB_WORKSPACE/.github/scripts/generate_tag.sh" "$KEYWORD" "$DATE_TAG"
+          bash "$GITHUB_WORKSPACE/.github/scripts/generate_tag.sh" "$KEYWORD" "${{ env.DATE_TAG }}"
           TAG_NAME=$(cat .tag_name)
 
           if [ -z "$TAG_NAME" ]; then
-            echo "ERROR: Empty tag name generated. Exiting."
             exit 1
           fi
-
-          echo "Generated tag: $TAG_NAME"
 
           git tag "$TAG_NAME"
           git push origin "$TAG_NAME"
@@ -70,48 +64,38 @@ jobs:
 
       - name: Clone and process repo-B
         run: |
-          DATE_TAG=$(date +'%Y-%m-%d')
           gh repo clone YoursTruely/repo-B && cd repo-B
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
-          git config --global credential.helper store
           git remote set-url origin https://x-access-token:$GH_TOKEN@github.com/YoursTruely/repo-B
           git fetch origin develop
-          BRANCH_NAME="test-$DATE_TAG"
+          BRANCH_NAME="test-${{ env.DATE_TAG }}"
 
           if git ls-remote --exit-code --heads origin "$BRANCH_NAME"; then
-            echo "Branch $BRANCH_NAME already exists. Checking it out."
             git checkout "$BRANCH_NAME"
           else
-            git checkout origin/develop -b "$BRANCH_NAME"
+            git checkout -b "$BRANCH_NAME" origin/develop
           fi
 
           for BRANCH in $(gh pr list --base develop --state open --json headRefName,mergeable --jq ".[] | select(.headRefName | test(\"$KEYWORD\")) | select(.mergeable == \"MERGEABLE\") | .headRefName"); do
-            echo "Merging $BRANCH into $BRANCH_NAME..."
             git fetch origin $BRANCH
-            git merge origin/$BRANCH --no-edit || { echo "Conflict in $BRANCH — stopping"; exit 1; }
+            git merge origin/$BRANCH --no-edit || exit 1
           done
 
-          bash "$GITHUB_WORKSPACE/.github/scripts/generate_tag.sh" "$KEYWORD" "$DATE_TAG"
+          bash "$GITHUB_WORKSPACE/.github/scripts/generate_tag.sh" "$KEYWORD" "${{ env.DATE_TAG }}"
           RELEASE_TAG=$(cat .tag_name)
 
           if [ -z "$RELEASE_TAG" ]; then
-            echo "ERROR: Empty tag name generated. Exiting."
             exit 1
           fi
 
-          echo "Generated tag: $RELEASE_TAG"
-
-          echo "Updating parent version and common-domain version in pom.xml to $RELEASE_TAG"
-          ESCAPED_TAG=$(printf '%s' "$RELEASE_TAG" | sed 's/[&\/]/\\&/g')
-          sed -i "0,/<parent>/,/<\/parent>/s#<version>.*</version>#<version>$ESCAPED_TAG</version>#" pom.xml
+          ESCAPED_TAG=$(printf '%s' "$RELEASE_TAG" | sed 's/[&\/@]/\\&/g')
+          sed -i "0,/<parent>/,/parent>/ { /<version>.*<\\/version>/ s#<version>.*</version>#<version>$ESCAPED_TAG</version># }" pom.xml
           sed -i "s|<common-domain-version>.*</common-domain-version>|<common-domain-version>$ESCAPED_TAG</common-domain-version>|" pom.xml
 
-          if git diff --quiet; then
-            echo "No changes to commit"
-          else
+          if ! git diff --quiet; then
             git add pom.xml
-            git commit -m "Update parent version and common-domain version to $RELEASE_TAG"
+            git commit -m "Update versions to $RELEASE_TAG"
           fi
 
           git push origin "$BRANCH_NAME"
@@ -129,48 +113,38 @@ jobs:
 
       - name: Clone and process repo-A
         run: |
-          DATE_TAG=$(date +'%Y-%m-%d')
           gh repo clone YoursTruely/repo-A && cd repo-A
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
-          git config --global credential.helper store
           git remote set-url origin https://x-access-token:$GH_TOKEN@github.com/YoursTruely/repo-A
           git fetch origin develop
-          BRANCH_NAME="test-$DATE_TAG"
+          BRANCH_NAME="test-${{ env.DATE_TAG }}"
 
           if git ls-remote --exit-code --heads origin "$BRANCH_NAME"; then
-            echo "Branch $BRANCH_NAME already exists. Checking it out."
             git checkout "$BRANCH_NAME"
           else
-            git checkout origin/develop -b "$BRANCH_NAME"
+            git checkout -b "$BRANCH_NAME" origin/develop
           fi
 
           for BRANCH in $(gh pr list --base develop --state open --json headRefName,mergeable --jq ".[] | select(.headRefName | test(\"$KEYWORD\")) | select(.mergeable == \"MERGEABLE\") | .headRefName"); do
-            echo "Merging $BRANCH into $BRANCH_NAME..."
             git fetch origin $BRANCH
-            git merge origin/$BRANCH --no-edit || { echo "Conflict in $BRANCH — stopping"; exit 1; }
+            git merge origin/$BRANCH --no-edit || exit 1
           done
 
-          bash "$GITHUB_WORKSPACE/.github/scripts/generate_tag.sh" "$KEYWORD" "$DATE_TAG"
+          bash "$GITHUB_WORKSPACE/.github/scripts/generate_tag.sh" "$KEYWORD" "${{ env.DATE_TAG }}"
           RELEASE_TAG=$(cat .tag_name)
 
           if [ -z "$RELEASE_TAG" ]; then
-            echo "ERROR: Empty tag name generated. Exiting."
             exit 1
           fi
 
-          echo "Generated tag: $RELEASE_TAG"
-
-          echo "Updating parent and common-domain version in pom.xml to $RELEASE_TAG"
-          ESCAPED_TAG=$(printf '%s' "$RELEASE_TAG" | sed 's/[&\/]/\\&/g')
-          sed -i "0,/<parent>/,/<\/parent>/s#<version>.*</version>#<version>$ESCAPED_TAG</version>#" pom.xml
+          ESCAPED_TAG=$(printf '%s' "$RELEASE_TAG" | sed 's/[&\/@]/\\&/g')
+          sed -i "0,/<parent>/,/parent>/ { /<version>.*<\\/version>/ s#<version>.*</version>#<version>$ESCAPED_TAG</version># }" pom.xml
           sed -i "s|<common-domain-version>.*</common-domain-version>|<common-domain-version>$ESCAPED_TAG</common-domain-version>|" pom.xml
 
-          if git diff --quiet; then
-            echo "No changes to commit"
-          else
+          if ! git diff --quiet; then
             git add pom.xml
-            git commit -m "Update parent and common-domain version to $RELEASE_TAG"
+            git commit -m "Update versions to $RELEASE_TAG"
           fi
 
           git push origin "$BRANCH_NAME"
