@@ -12,14 +12,15 @@ env:
 jobs:
   release-c:
     runs-on: ubuntu-latest
-        steps:
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
       - name: Clone and process repo-C
         env:
           GH_TOKEN: ${{ secrets.REPO_C_TOKEN }}
         run: |
           echo "$GH_TOKEN" | gh auth login --with-token
           gh repo clone YourOrg/repo-C && cd repo-C
-          cd repo-C
           git fetch origin develop
           BRANCH_NAME="test-${{ env.DATE_TAG }}"
           if git ls-remote --exit-code --heads origin "$BRANCH_NAME"; then
@@ -36,13 +37,6 @@ jobs:
           done
 
           git push origin "$BRANCH_NAME"
-          fi
-
-          for BRANCH in $(gh pr list --base develop --state open --json headRefName --jq ".[] | select(.headRefName | test(\"$KEYWORD\")) | .headRefName"); do
-            echo "Merging $BRANCH into $BRANCH_NAME..."
-            git fetch origin $BRANCH
-            git merge origin/$BRANCH --no-edit || { echo "Conflict in $BRANCH — stopping"; exit 1; }
-          done
 
           git push origin "$BRANCH_NAME"
 
@@ -55,14 +49,15 @@ jobs:
   release-b:
     needs: release-c
     runs-on: ubuntu-latest
-        steps:
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
       - name: Clone and process repo-B
         env:
           GH_TOKEN: ${{ secrets.REPO_B_TOKEN }}
         run: |
           echo "$GH_TOKEN" | gh auth login --with-token
           gh repo clone YourOrg/repo-B && cd repo-B
-          cd repo-B
           git fetch origin develop
           BRANCH_NAME="test-${{ env.DATE_TAG }}"
           git checkout origin/develop -b "$BRANCH_NAME"
