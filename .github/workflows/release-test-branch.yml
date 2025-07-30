@@ -1,0 +1,129 @@
+name: Weekly Merge and Tag for A, B, and C
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * 3'  # Every Wednesday at 09:00 UTC
+
+env:
+  KEYWORD: "SCON"
+  DATE_TAG: "$(date +'%Y-%m-%d')"
+
+jobs:
+  release-c:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone and process repo C
+        env:
+          GH_TOKEN: ${{ secrets.REPO_C_TOKEN }}
+        run: |
+          gh auth setup-git
+          gh repo clone YourOrg/repo-c
+          cd repo-c
+          git fetch origin develop
+          BRANCH_NAME="test-${{ env.DATE_TAG }}"
+          if git ls-remote --exit-code --heads origin "$BRANCH_NAME"; then
+            echo "Branch $BRANCH_NAME already exists. Checking it out."
+            git checkout "$BRANCH_NAME"
+          else
+            git checkout origin/develop -b "$BRANCH_NAME"
+          fi
+
+          for BRANCH in $(gh pr list --base develop --state open --json headRefName --jq ".[] | select(.headRefName | test(\"$KEYWORD\")) | .headRefName"); do
+            echo "Merging $BRANCH into $BRANCH_NAME..."
+            git fetch origin $BRANCH
+            git merge origin/$BRANCH --no-edit || { echo "Conflict in $BRANCH — stopping"; exit 1; }
+          done
+
+          git push origin "$BRANCH_NAME"
+          fi
+
+          for BRANCH in $(gh pr list --base develop --state open --json headRefName --jq ".[] | select(.headRefName | test(\"$KEYWORD\")) | .headRefName"); do
+            echo "Merging $BRANCH into $BRANCH_NAME..."
+            git fetch origin $BRANCH
+            git merge origin/$BRANCH --no-edit || { echo "Conflict in $BRANCH — stopping"; exit 1; }
+          done
+
+          git push origin "$BRANCH_NAME"
+
+          .github/scripts/generate_tag.sh "$KEYWORD" "${{ env.DATE_TAG }}"
+          TAG_NAME=$(cat .tag_name)
+
+          git tag "$TAG_NAME"
+          git push origin "$TAG_NAME"
+
+  release-b:
+    needs: release-c
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone and process repo B
+        env:
+          GH_TOKEN: ${{ secrets.REPO_B_TOKEN }}
+        run: |
+          gh auth setup-git
+          gh repo clone YourOrg/repo-b
+          cd repo-b
+          git fetch origin develop
+          BRANCH_NAME="test-${{ env.DATE_TAG }}"
+          git checkout origin/develop -b "$BRANCH_NAME"
+
+          for BRANCH in $(gh pr list --base develop --state open --json headRefName --jq ".[] | select(.headRefName | test(\"$KEYWORD\")) | .headRefName"); do
+            echo "Merging $BRANCH into $BRANCH_NAME..."
+            git fetch origin $BRANCH
+            git merge origin/$BRANCH --no-edit || { echo "Conflict in $BRANCH — stopping"; exit 1; }
+          done
+
+          # Update common-domain version in B's pom.xml
+          .github/scripts/generate_tag.sh "$KEYWORD" "${{ env.DATE_TAG }}"
+          RELEASE_TAG=$(cat .tag_name)
+
+          echo "Updating parent version and common-domain version in pom.xml to $RELEASE_TAG"
+          sed -i "0,/<parent>/,/</parent>/s|<version>.*</version>|<version>$RELEASE_TAG</version>|" pom.xml
+          sed -i "s|<common-domain-version>.*</common-domain-version>|<common-domain-version>$RELEASE_TAG</common-domain-version>|" pom.xml
+
+          if git diff --quiet; then
+            echo "No changes to commit"
+          else
+            git add pom.xml
+            git commit -m "Update parent version and common-domain version to $RELEASE_TAG"
+          fi
+
+          git push origin "$BRANCH_NAME"
+          git tag "$RELEASE_TAG"
+          git push origin "$RELEASE_TAG"
+# This is a basic workflow to help you get started with Actions
+
+name: CI
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push or pull request events but only for the "develop" branch
+  push:
+    branches: [ "develop" ]
+  pull_request:
+    branches: [ "develop" ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v4
+
+      # Runs a single command using the runners shell
+      - name: Run a one-line script
+        run: echo Hello, world!
+
+      # Runs a set of commands using the runners shell
+      - name: Run a multi-line script
+        run: |
+          echo Add other actions to build,
+          echo test, and deploy your project.
