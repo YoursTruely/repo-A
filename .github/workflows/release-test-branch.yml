@@ -17,6 +17,9 @@ jobs:
       - name: Checkout controller repo
         uses: actions/checkout@v4
 
+      - name: Install xmllint
+        run: sudo apt-get update && sudo apt-get install -y libxml2-utils
+
       - name: Clone and process repo-C
         run: |
           DATE_TAG=$(date +'%Y-%m-%d')
@@ -45,6 +48,13 @@ jobs:
 
           bash "$GITHUB_WORKSPACE/.github/scripts/generate_tag.sh" "$KEYWORD" "$DATE_TAG"
           TAG_NAME=$(cat .tag_name)
+
+          if [ -z "$TAG_NAME" ]; then
+            echo "ERROR: Empty tag name generated. Exiting."
+            exit 1
+          fi
+
+          echo "Generated tag: $TAG_NAME"
 
           git tag "$TAG_NAME"
           git push origin "$TAG_NAME"
@@ -82,8 +92,15 @@ jobs:
             git merge origin/$BRANCH --no-edit || { echo "Conflict in $BRANCH — stopping"; exit 1; }
           done
 
-          .github/scripts/generate_tag.sh "$KEYWORD" "$DATE_TAG"
+          bash "$GITHUB_WORKSPACE/.github/scripts/generate_tag.sh" "$KEYWORD" "$DATE_TAG"
           RELEASE_TAG=$(cat .tag_name)
+
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "ERROR: Empty tag name generated. Exiting."
+            exit 1
+          fi
+
+          echo "Generated tag: $RELEASE_TAG"
 
           echo "Updating parent version and common-domain version in pom.xml to $RELEASE_TAG"
           sed -i "0,/<parent>/,/</parent>/s|<version>.*</version>|<version>$RELEASE_TAG</version>|" pom.xml
