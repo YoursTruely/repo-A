@@ -14,6 +14,9 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.REPO_C_TOKEN }}
     steps:
+      - name: Checkout controller repo
+        uses: actions/checkout@v4
+
       - name: Clone and process repo-C
         run: |
           DATE_TAG=$(date +'%Y-%m-%d')
@@ -40,7 +43,7 @@ jobs:
 
           git push origin "$BRANCH_NAME"
 
-          .github/scripts/generate_tag.sh "$KEYWORD" "$DATE_TAG"
+          bash "$GITHUB_WORKSPACE/.github/scripts/generate_tag.sh" "$KEYWORD" "$DATE_TAG"
           TAG_NAME=$(cat .tag_name)
 
           git tag "$TAG_NAME"
@@ -52,6 +55,9 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.REPO_B_TOKEN }}
     steps:
+      - name: Checkout controller repo
+        uses: actions/checkout@v4
+
       - name: Clone and process repo-B
         run: |
           DATE_TAG=$(date +'%Y-%m-%d')
