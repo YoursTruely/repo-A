@@ -3,14 +3,21 @@
 KEYWORD="$1"
 DATE_TAG="$2"
 
-# Default fallback version
-VERSION_PREFIX="0.0.0"
-
-if [ -f "pom.xml" ]; then
-  VERSION_PREFIX=$(xmllint --xpath "/*[local-name()='project']/*[local-name()='version']/text()" pom.xml 2>/dev/null || echo "0.0.0")
+# Check for pom.xml presence
+if [ ! -f "pom.xml" ]; then
+  echo "[ERROR] pom.xml not found. Aborting tag generation."
+  exit 1
 fi
 
-# Remove suffix (e.g., -RC.2) if present
+# Try to extract version
+VERSION_PREFIX=$(xmllint --xpath "/*[local-name()='project']/*[local-name()='version']/text()" pom.xml 2>/dev/null)
+
+if [ -z "$VERSION_PREFIX" ]; then
+  echo "[ERROR] Failed to extract <version> from pom.xml. Aborting."
+  exit 1
+fi
+
+# Strip suffix like -RC.2
 VERSION_PREFIX=$(echo "$VERSION_PREFIX" | sed 's/-.*//')
 
 # Construct suffix base
@@ -24,3 +31,4 @@ done
 
 TAG_NAME="${VERSION_PREFIX}-${SUFFIX_BASE}.${INDEX}"
 echo "$TAG_NAME" > .tag_name
+echo "[INFO] Generated tag: $TAG_NAME"
