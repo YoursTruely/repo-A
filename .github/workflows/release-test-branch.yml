@@ -1,4 +1,4 @@
-name: Weekly Merge and Tag for A, repo-B, and repo-C
+name: Weekly Merge and Tag for A, B, and C
 
 on:
   workflow_dispatch:
@@ -7,11 +7,12 @@ on:
 
 env:
   KEYWORD: "SCON"
-  DATE_TAG: ${{ github.run_id }}
 
 jobs:
   release-c:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.set_tag.outputs.tag }}
     env:
       GH_TOKEN: ${{ secrets.REPO_C_TOKEN }}
     steps:
@@ -21,136 +22,136 @@ jobs:
       - name: Install XML tools
         run: sudo apt-get update && sudo apt-get install -y libxml2-utils xsltproc
 
-      - name: Clone and process repo-C
+      - name: Clone and check for PRs
+        id: check_prs
         run: |
           gh repo clone YoursTruely/repo-C && cd repo-C
+          PRS=$(gh pr list --base develop --state open --json headRefName,mergeable --jq ".[] | select(.headRefName | test(\"$KEYWORD\")) | select(.mergeable == \"MERGEABLE\") | .headRefName")
+          echo "prs=$PRS" >> $GITHUB_OUTPUT
+
+      - name: Merge and tag if PRs exist
+        id: set_tag
+        if: steps.check_prs.outputs.prs != ''
+        run: |
+          cd repo-C
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
           git remote set-url origin https://x-access-token:$GH_TOKEN@github.com/YoursTruely/repo-C
           git fetch origin develop
-          BRANCH_NAME="test-${{ env.DATE_TAG }}"
 
-          if git ls-remote --exit-code --heads origin "$BRANCH_NAME"; then
-            git checkout "$BRANCH_NAME"
-          else
-            git checkout -b "$BRANCH_NAME" origin/develop
-          fi
+          BRANCH_NAME="test-${{ github.run_id }}"
+          git checkout -b "$BRANCH_NAME" origin/develop
 
-          for BRANCH in $(gh pr list --base develop --state open --json headRefName,mergeable --jq ".[] | select(.headRefName | test(\"$KEYWORD\")) | select(.mergeable == \"MERGEABLE\") | .headRefName"); do
+          for BRANCH in ${{ steps.check_prs.outputs.prs }}; do
             git fetch origin $BRANCH
             git merge origin/$BRANCH --no-edit || exit 1
           done
 
           git push origin "$BRANCH_NAME"
-
-          bash "$GITHUB_WORKSPACE/.github/scripts/generate_tag.sh" "$KEYWORD" "${{ env.DATE_TAG }}"
+          bash "$GITHUB_WORKSPACE/.github/scripts/generate_tag.sh" "$KEYWORD" "${{ github.run_id }}"
           TAG_NAME=$(cat .tag_name)
 
-          if [ -z "$TAG_NAME" ]; then
-            exit 1
-          fi
+          if [ -z "$TAG_NAME" ]; then exit 1; fi
 
           git tag "$TAG_NAME"
           git push origin "$TAG_NAME"
+          echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
 
   release-b:
     needs: release-c
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.set_tag.outputs.tag }}
     env:
       GH_TOKEN: ${{ secrets.REPO_B_TOKEN }}
+      C_TAG: ${{ needs.release-c.outputs.tag }}
     steps:
+      - name: Skip if no PRs in repo-C
+        if: ${{ env.C_TAG == '' }}
+        run: echo "No changes in repo-C, skipping version bump in B."
+
       - name: Checkout controller repo
+        if: ${{ env.C_TAG != '' }}
         uses: actions/checkout@v4
 
-      - name: Install XML tools
-        run: sudo apt-get update && sudo apt-get install -y libxml2-utils xsltproc
-
-      - name: Clone and process repo-B
+      - name: Clone, merge, tag if PRs exist
+        id: set_tag
+        if: ${{ env.C_TAG != '' }}
         run: |
           gh repo clone YoursTruely/repo-B && cd repo-B
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
           git remote set-url origin https://x-access-token:$GH_TOKEN@github.com/YoursTruely/repo-B
           git fetch origin develop
-          BRANCH_NAME="test-${{ env.DATE_TAG }}"
+          BRANCH_NAME="test-${{ github.run_id }}"
+          git checkout -b "$BRANCH_NAME" origin/develop
 
-          if git ls-remote --exit-code --heads origin "$BRANCH_NAME"; then
-            git checkout "$BRANCH_NAME"
-          else
-            git checkout -b "$BRANCH_NAME" origin/develop
-          fi
+          PRS=$(gh pr list --base develop --state open --json headRefName,mergeable --jq ".[] | select(.headRefName | test(\"$KEYWORD\")) | select(.mergeable == \"MERGEABLE\") | .headRefName")
+          if [ -z "$PRS" ]; then echo "tag=" >> $GITHUB_OUTPUT; exit 0; fi
 
-          for BRANCH in $(gh pr list --base develop --state open --json headRefName,mergeable --jq ".[] | select(.headRefName | test(\"$KEYWORD\")) | select(.mergeable == \"MERGEABLE\") | .headRefName"); do
+          for BRANCH in $PRS; do
             git fetch origin $BRANCH
             git merge origin/$BRANCH --no-edit || exit 1
           done
 
-          bash "$GITHUB_WORKSPACE/.github/scripts/generate_tag.sh" "$KEYWORD" "${{ env.DATE_TAG }}"
-          RELEASE_TAG=$(cat .tag_name)
+          bash "$GITHUB_WORKSPACE/.github/scripts/generate_tag.sh" "$KEYWORD" "${{ github.run_id }}"
+          TAG_NAME=$(cat .tag_name)
+          git tag "$TAG_NAME"
+          git push origin "$BRANCH_NAME"
+          git push origin "$TAG_NAME"
 
-          if [ -z "$RELEASE_TAG" ]; then
-            exit 1
-          fi
-
-          # Update POM versions using the script
-          bash "$GITHUB_WORKSPACE/.github/scripts/update_pom_versions.sh" "$RELEASE_TAG"
-
+          bash "$GITHUB_WORKSPACE/.github/scripts/update_pom_versions.sh" "$TAG_NAME"
           if ! git diff --quiet; then
             git add pom.xml
-            git commit -m "Update versions to $RELEASE_TAG"
+            git commit -m "Update versions to $TAG_NAME"
+            git push origin "$BRANCH_NAME"
           fi
 
-          git push origin "$BRANCH_NAME"
-          git tag "$RELEASE_TAG"
-          git push origin "$RELEASE_TAG"
+          echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
 
   release-a:
     needs: release-b
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      B_TAG: ${{ needs.release-b.outputs.tag }}
     steps:
+      - name: Skip if no PRs in repo-B
+        if: ${{ env.B_TAG == '' }}
+        run: echo "No changes in repo-B, skipping version bump in A."
+
       - name: Checkout controller repo
+        if: ${{ env.B_TAG != '' }}
         uses: actions/checkout@v4
 
-      - name: Install XML tools
-        run: sudo apt-get update && sudo apt-get install -y libxml2-utils xsltproc
-
-      - name: Clone and process repo-A
+      - name: Clone, merge, and tag if PRs exist
+        if: ${{ env.B_TAG != '' }}
         run: |
           gh repo clone YoursTruely/repo-A && cd repo-A
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
           git remote set-url origin https://x-access-token:$GH_TOKEN@github.com/YoursTruely/repo-A
           git fetch origin develop
-          BRANCH_NAME="test-${{ env.DATE_TAG }}"
+          BRANCH_NAME="test-${{ github.run_id }}"
+          git checkout -b "$BRANCH_NAME" origin/develop
 
-          if git ls-remote --exit-code --heads origin "$BRANCH_NAME"; then
-            git checkout "$BRANCH_NAME"
-          else
-            git checkout -b "$BRANCH_NAME" origin/develop
-          fi
+          PRS=$(gh pr list --base develop --state open --json headRefName,mergeable --jq ".[] | select(.headRefName | test(\"$KEYWORD\")) | select(.mergeable == \"MERGEABLE\") | .headRefName")
+          if [ -z "$PRS" ]; then exit 0; fi
 
-          for BRANCH in $(gh pr list --base develop --state open --json headRefName,mergeable --jq ".[] | select(.headRefName | test(\"$KEYWORD\")) | select(.mergeable == \"MERGEABLE\") | .headRefName"); do
+          for BRANCH in $PRS; do
             git fetch origin $BRANCH
             git merge origin/$BRANCH --no-edit || exit 1
           done
 
-          bash "$GITHUB_WORKSPACE/.github/scripts/generate_tag.sh" "$KEYWORD" "${{ env.DATE_TAG }}"
-          RELEASE_TAG=$(cat .tag_name)
+          bash "$GITHUB_WORKSPACE/.github/scripts/generate_tag.sh" "$KEYWORD" "${{ github.run_id }}"
+          TAG_NAME=$(cat .tag_name)
+          git tag "$TAG_NAME"
+          git push origin "$BRANCH_NAME"
+          git push origin "$TAG_NAME"
 
-          if [ -z "$RELEASE_TAG" ]; then
-            exit 1
-          fi
-
-          # Update POM versions using the script
-          bash "$GITHUB_WORKSPACE/.github/scripts/update_pom_versions.sh" "$RELEASE_TAG"
-
+          bash "$GITHUB_WORKSPACE/.github/scripts/update_pom_versions.sh" "$TAG_NAME"
           if ! git diff --quiet; then
             git add pom.xml
-            git commit -m "Update versions to $RELEASE_TAG"
+            git commit -m "Update versions to $TAG_NAME"
+            git push origin "$BRANCH_NAME"
           fi
-
-          git push origin "$BRANCH_NAME"
-          git tag "$RELEASE_TAG"
-          git push origin "$RELEASE_TAG"
